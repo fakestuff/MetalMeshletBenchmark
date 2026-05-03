@@ -3,7 +3,7 @@
 #import <ModelIO/ModelIO.h>
 
 #include <vector>
-#include <meshoptimizer/meshoptimizer.h>
+#include "meshoptimizer.h"
 
 #import "MBEMesh.h"
 

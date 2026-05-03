@@ -5,12 +5,19 @@
 
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
+#import <QuartzCore/QuartzCore.h>
 
 @interface MBEViewController () <MTKViewDelegate>
 @property (nonatomic, strong) id<MTLDevice> device;
 @property (nonatomic, strong) id<MTLCommandQueue> commandQueue;
 @property (nonatomic, strong) MBEMeshletRenderer *renderer;
 @property (nonatomic, weak) MTKView *mtkView;
+@property (nonatomic, strong) NSTextField *statsLabel;
+@property (nonatomic, assign) NSUInteger statsFrameCount;
+@property (nonatomic, assign) CFTimeInterval statsWindowStartTime;
+@property (nonatomic, assign) double currentFPS;
+@property (nonatomic, assign) double latestCPUFrameMS;
+@property (nonatomic, assign) double latestGPUFrameMS;
 @end
 
 @implementation MBEViewController
@@ -32,12 +39,37 @@
     self.mtkView.colorPixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
     self.mtkView.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
 
+    [self makeStatsOverlay];
+
     self.renderer = [[MBEMeshletRenderer alloc] initWithDevice:self.device
                                                   commandQueue:self.commandQueue
                                                           view:self.mtkView];
 
-    NSURL *assetURL = [[NSBundle mainBundle] URLForResource:@"dragon" withExtension:@"mbemesh"];
-    self.renderer.mesh = [[MBEMesh alloc] initWithURL:assetURL device:self.device];
+    NSURL *assetURL = [[NSBundle mainBundle] URLForResource:@"kitten" withExtension:@"obj"];
+    self.renderer.mesh = [[MBEMesh alloc] initWithOBJURL:assetURL device:self.device];
+}
+
+- (void)makeStatsOverlay {
+    NSTextField *statsLabel = [NSTextField labelWithString:@"FPS: --\nCPU: -- ms\nGPU: -- ms"];
+    statsLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    statsLabel.font = [NSFont monospacedDigitSystemFontOfSize:12.0 weight:NSFontWeightMedium];
+    statsLabel.textColor = NSColor.whiteColor;
+    statsLabel.maximumNumberOfLines = 3;
+    statsLabel.alignment = NSTextAlignmentLeft;
+    statsLabel.wantsLayer = YES;
+    statsLabel.layer.backgroundColor = [NSColor colorWithWhite:0.0 alpha:0.65].CGColor;
+    statsLabel.layer.cornerRadius = 6.0;
+
+    [self.view addSubview:statsLabel];
+    [NSLayoutConstraint activateConstraints:@[
+        [statsLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12.0],
+        [statsLabel.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:12.0],
+        [statsLabel.widthAnchor constraintEqualToConstant:140.0],
+        [statsLabel.heightAnchor constraintEqualToConstant:58.0],
+    ]];
+
+    self.statsLabel = statsLabel;
+    self.statsWindowStartTime = CACurrentMediaTime();
 }
 
 - (void)mtkView:(nonnull MTKView *)view drawableSizeWillChange:(CGSize)size {
@@ -45,6 +77,7 @@
 }
 
 - (void)drawInMTKView:(nonnull MTKView *)view {
+    CFTimeInterval frameStartTime = CACurrentMediaTime();
     MTLRenderPassDescriptor *renderPass = view.currentRenderPassDescriptor;
     if (renderPass == nil) {
         return; // Didn't get a render pass descriptor; drop this frame
@@ -55,7 +88,52 @@
     [self.renderer draw:renderCommandEncoder];
     [renderCommandEncoder endEncoding];
     [commandBuffer presentDrawable:view.currentDrawable];
+
+    __weak typeof(self) weakSelf = self;
+    [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completedCommandBuffer) {
+        double gpuFrameMS = 0.0;
+        if (completedCommandBuffer.GPUEndTime > completedCommandBuffer.GPUStartTime) {
+            gpuFrameMS = (completedCommandBuffer.GPUEndTime - completedCommandBuffer.GPUStartTime) * 1000.0;
+        }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf updateStatsWithGPUFrameMS:gpuFrameMS countFrame:NO];
+        });
+    }];
+
     [commandBuffer commit];
+
+    self.latestCPUFrameMS = (CACurrentMediaTime() - frameStartTime) * 1000.0;
+    [self updateStatsWithGPUFrameMS:self.latestGPUFrameMS countFrame:YES];
+}
+
+- (void)updateStatsWithGPUFrameMS:(double)gpuFrameMS countFrame:(BOOL)countFrame {
+    if (gpuFrameMS > 0.0) {
+        self.latestGPUFrameMS = gpuFrameMS;
+    }
+
+    if (countFrame) {
+        self.statsFrameCount += 1;
+    }
+
+    CFTimeInterval now = CACurrentMediaTime();
+    CFTimeInterval elapsed = now - self.statsWindowStartTime;
+    if (elapsed < 0.25) {
+        return;
+    }
+
+    self.currentFPS = self.statsFrameCount / elapsed;
+    self.statsFrameCount = 0;
+    self.statsWindowStartTime = now;
+
+    NSString *gpuString = self.latestGPUFrameMS > 0.0
+        ? [NSString stringWithFormat:@"%.2f", self.latestGPUFrameMS]
+        : @"--";
+
+    self.statsLabel.stringValue = [NSString stringWithFormat:@"FPS: %.1f\nCPU: %.2f ms\nGPU: %@ ms",
+                                   self.currentFPS,
+                                   self.latestCPUFrameMS,
+                                   gpuString];
 }
 
 @end

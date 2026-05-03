@@ -61,9 +61,17 @@ typedef struct MBEMeshFileMeshlet {
 @property (nonatomic, copy) MBEMeshBuffer *meshletVertexBuffer;
 @property (nonatomic, assign) NSUInteger meshletMaxVertexCount;
 @property (nonatomic, assign) NSUInteger meshletMaxTriangleCount;
+@property (nonatomic, assign) NSUInteger vertexCount;
+@property (nonatomic, assign) NSUInteger triangleCount;
+@property (nonatomic, assign) NSUInteger meshletCount;
 @property (nonatomic, copy) NSArray<MBESubmesh *> *submeshes;
 
 - (instancetype _Nullable)initWithURL:(NSURL *)url device:(id<MTLDevice>)device;
+- (instancetype _Nullable)initWithOBJURL:(NSURL *)url device:(id<MTLDevice>)device;
+- (instancetype _Nullable)initWithOBJURL:(NSURL *)url
+                                  device:(id<MTLDevice>)device
+                   meshletMaxVertexCount:(NSUInteger)meshletMaxVertexCount
+                 meshletMaxTriangleCount:(NSUInteger)meshletMaxTriangleCount;
 
 @end
 

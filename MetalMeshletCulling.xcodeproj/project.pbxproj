@@ -15,10 +15,17 @@
 		8360B7CD29C63AFA00A9706E /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7CC29C63AFA00A9706E /* main.mm */; };
 		8360B7D329C644B200A9706E /* ModelIO.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8360B7D229C644B200A9706E /* ModelIO.framework */; };
 		8360B7D529C660A800A9706E /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7D429C660A800A9706E /* Shaders.metal */; };
-		8360B7D829C6979900A9706E /* MBEMesh.m in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7D729C6979900A9706E /* MBEMesh.m */; };
-		8360B7D929C6979900A9706E /* MBEMesh.m in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7D729C6979900A9706E /* MBEMesh.m */; };
+		8360B7D829C6979900A9706E /* MBEMesh.mm in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7D729C6979900A9706E /* MBEMesh.mm */; };
 		8360B7DC29C7854F00A9706E /* MBEMeshletRenderer.m in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7DB29C7854F00A9706E /* MBEMeshletRenderer.m */; };
 		8360B7E329C82A4300A9706E /* dragon.mbemesh in Resources */ = {isa = PBXBuildFile; fileRef = 8360B7E129C82A4300A9706E /* dragon.mbemesh */; };
+		8360B7E429D0000000A9706E /* ModelIO.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8360B7D229C644B200A9706E /* ModelIO.framework */; };
+		8360B7E529D0000100A9706E /* kitten.obj in Resources */ = {isa = PBXBuildFile; fileRef = 8360B7EC29D0000800A9706E /* kitten.obj */; };
+		8360B7E629D0000200A9706E /* allocator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7ED29D0000900A9706E /* allocator.cpp */; };
+		8360B7E729D0000300A9706E /* clusterizer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7EE29D0000A00A9706E /* clusterizer.cpp */; };
+		8360B7E829D0000400A9706E /* meshletutils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7EF29D0000B00A9706E /* meshletutils.cpp */; };
+		8360B7E929D0000500A9706E /* allocator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7ED29D0000900A9706E /* allocator.cpp */; };
+		8360B7EA29D0000600A9706E /* clusterizer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7EE29D0000A00A9706E /* clusterizer.cpp */; };
+		8360B7EB29D0000700A9706E /* meshletutils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7EF29D0000B00A9706E /* meshletutils.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -47,10 +54,15 @@
 		8360B7D229C644B200A9706E /* ModelIO.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ModelIO.framework; path = System/Library/Frameworks/ModelIO.framework; sourceTree = SDKROOT; };
 		8360B7D429C660A800A9706E /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
 		8360B7D629C6979900A9706E /* MBEMesh.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MBEMesh.h; sourceTree = "<group>"; };
-		8360B7D729C6979900A9706E /* MBEMesh.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MBEMesh.m; sourceTree = "<group>"; };
+		8360B7D729C6979900A9706E /* MBEMesh.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MBEMesh.mm; sourceTree = "<group>"; };
 		8360B7DA29C7854F00A9706E /* MBEMeshletRenderer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MBEMeshletRenderer.h; sourceTree = "<group>"; };
 		8360B7DB29C7854F00A9706E /* MBEMeshletRenderer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MBEMeshletRenderer.m; sourceTree = "<group>"; };
 		8360B7E129C82A4300A9706E /* dragon.mbemesh */ = {isa = PBXFileReference; lastKnownFileType = file; path = dragon.mbemesh; sourceTree = "<group>"; };
+		8360B7EC29D0000800A9706E /* kitten.obj */ = {isa = PBXFileReference; lastKnownFileType = text; path = kitten.obj; sourceTree = "<group>"; };
+		8360B7ED29D0000900A9706E /* allocator.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = third_party/meshoptimizer/src/allocator.cpp; sourceTree = SOURCE_ROOT; };
+		8360B7EE29D0000A00A9706E /* clusterizer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = third_party/meshoptimizer/src/clusterizer.cpp; sourceTree = SOURCE_ROOT; };
+		8360B7EF29D0000B00A9706E /* meshletutils.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = third_party/meshoptimizer/src/meshletutils.cpp; sourceTree = SOURCE_ROOT; };
+		8360B7F029D0000C00A9706E /* meshoptimizer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = third_party/meshoptimizer/src/meshoptimizer.h; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,6 +70,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8360B7E429D0000000A9706E /* ModelIO.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,6 +90,7 @@
 			children = (
 				8360B7B029C6390700A9706E /* MetalMeshletCulling */,
 				8360B7CB29C63AFA00A9706E /* meshletgen */,
+				8360B7F129D0000D00A9706E /* meshoptimizer */,
 				8360B7AF29C6390700A9706E /* Products */,
 				8360B7D129C644B200A9706E /* Frameworks */,
 			);
@@ -96,7 +110,7 @@
 			children = (
 				8360B7E029C82A4300A9706E /* Resources */,
 				8360B7D629C6979900A9706E /* MBEMesh.h */,
-				8360B7D729C6979900A9706E /* MBEMesh.m */,
+				8360B7D729C6979900A9706E /* MBEMesh.mm */,
 				8360B7B429C6390700A9706E /* MBEViewController.h */,
 				8360B7B529C6390700A9706E /* MBEViewController.m */,
 				8360B7DA29C7854F00A9706E /* MBEMeshletRenderer.h */,
@@ -131,8 +145,20 @@
 			isa = PBXGroup;
 			children = (
 				8360B7E129C82A4300A9706E /* dragon.mbemesh */,
+				8360B7EC29D0000800A9706E /* kitten.obj */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		8360B7F129D0000D00A9706E /* meshoptimizer */ = {
+			isa = PBXGroup;
+			children = (
+				8360B7F029D0000C00A9706E /* meshoptimizer.h */,
+				8360B7ED29D0000900A9706E /* allocator.cpp */,
+				8360B7EE29D0000A00A9706E /* clusterizer.cpp */,
+				8360B7EF29D0000B00A9706E /* meshletutils.cpp */,
+			);
+			name = meshoptimizer;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -213,6 +239,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8360B7E529D0000100A9706E /* kitten.obj in Resources */,
 				8360B7E329C82A4300A9706E /* dragon.mbemesh in Resources */,
 				8360B7B829C6390800A9706E /* Assets.xcassets in Resources */,
 				8360B7BB29C6390800A9706E /* Main.storyboard in Resources */,
@@ -226,12 +253,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8360B7E629D0000200A9706E /* allocator.cpp in Sources */,
+				8360B7E729D0000300A9706E /* clusterizer.cpp in Sources */,
+				8360B7E829D0000400A9706E /* meshletutils.cpp in Sources */,
 				8360B7DC29C7854F00A9706E /* MBEMeshletRenderer.m in Sources */,
 				8360B7D529C660A800A9706E /* Shaders.metal in Sources */,
 				8360B7B629C6390700A9706E /* MBEViewController.m in Sources */,
 				8360B7BD29C6390800A9706E /* main.m in Sources */,
 				8360B7B329C6390700A9706E /* AppDelegate.m in Sources */,
-				8360B7D829C6979900A9706E /* MBEMesh.m in Sources */,
+				8360B7D829C6979900A9706E /* MBEMesh.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -239,8 +269,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8360B7E929D0000500A9706E /* allocator.cpp in Sources */,
+				8360B7EA29D0000600A9706E /* clusterizer.cpp in Sources */,
+				8360B7EB29D0000700A9706E /* meshletutils.cpp in Sources */,
 				8360B7CD29C63AFA00A9706E /* main.mm in Sources */,
-				8360B7D929C6979900A9706E /* MBEMesh.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -379,6 +411,7 @@
 				DEVELOPMENT_TEAM = RHRJ88BAB5;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/src";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMainStoryboardFile = Main;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -406,6 +439,7 @@
 				DEVELOPMENT_TEAM = RHRJ88BAB5;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/src";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMainStoryboardFile = Main;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -428,12 +462,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = RHRJ88BAB5;
 				ENABLE_HARDENED_RUNTIME = NO;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/include";
-				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/lib/arm64";
-				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(SRCROOT)/third_party/meshoptimizer/lib/arm64";
-				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(SRCROOT)/third_party/meshoptimizer/lib/x86_64";
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/src";
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
-				OTHER_LDFLAGS = "-lmeshoptimizer";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -445,12 +475,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = RHRJ88BAB5;
 				ENABLE_HARDENED_RUNTIME = NO;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/include";
-				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/lib/arm64";
-				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(SRCROOT)/third_party/meshoptimizer/lib/arm64";
-				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(SRCROOT)/third_party/meshoptimizer/lib/x86_64";
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/third_party/meshoptimizer/src";
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
-				OTHER_LDFLAGS = "-lmeshoptimizer";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
