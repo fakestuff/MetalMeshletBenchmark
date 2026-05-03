@@ -13,6 +13,7 @@
 @property (nonatomic, strong) MBEMeshletRenderer *renderer;
 @property (nonatomic, weak) MTKView *mtkView;
 @property (nonatomic, strong) NSTextField *statsLabel;
+@property (nonatomic, strong) NSSegmentedControl *renderPathControl;
 @property (nonatomic, assign) NSUInteger statsFrameCount;
 @property (nonatomic, assign) CFTimeInterval statsWindowStartTime;
 @property (nonatomic, assign) double currentFPS;
@@ -50,26 +51,60 @@
 }
 
 - (void)makeStatsOverlay {
-    NSTextField *statsLabel = [NSTextField labelWithString:@"FPS: --\nCPU: -- ms\nGPU: -- ms"];
+    NSTextField *statsLabel = [NSTextField labelWithString:@"Mode: Meshlet\nFPS: --\nCPU: -- ms\nGPU: -- ms\nInst: --/--"];
     statsLabel.translatesAutoresizingMaskIntoConstraints = NO;
     statsLabel.font = [NSFont monospacedDigitSystemFontOfSize:12.0 weight:NSFontWeightMedium];
     statsLabel.textColor = NSColor.whiteColor;
-    statsLabel.maximumNumberOfLines = 3;
+    statsLabel.maximumNumberOfLines = 5;
     statsLabel.alignment = NSTextAlignmentLeft;
     statsLabel.wantsLayer = YES;
     statsLabel.layer.backgroundColor = [NSColor colorWithWhite:0.0 alpha:0.65].CGColor;
     statsLabel.layer.cornerRadius = 6.0;
 
+    NSSegmentedControl *renderPathControl = [NSSegmentedControl segmentedControlWithLabels:@[ @"Indexed", @"Pulling", @"Meshlet" ]
+                                                                             trackingMode:NSSegmentSwitchTrackingSelectOne
+                                                                                   target:self
+                                                                                   action:@selector(renderPathControlChanged:)];
+    renderPathControl.translatesAutoresizingMaskIntoConstraints = NO;
+    renderPathControl.selectedSegment = MBERenderPathMeshlet;
+    renderPathControl.controlSize = NSControlSizeRegular;
+    renderPathControl.segmentStyle = NSSegmentStyleSeparated;
+    renderPathControl.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+    for (NSInteger segment = 0; segment < renderPathControl.segmentCount; ++segment) {
+        [renderPathControl setWidth:72.0 forSegment:segment];
+    }
+
+    NSView *renderPathBackground = [NSView new];
+    renderPathBackground.translatesAutoresizingMaskIntoConstraints = NO;
+    renderPathBackground.wantsLayer = YES;
+    renderPathBackground.layer.backgroundColor = [NSColor colorWithWhite:0.0 alpha:0.65].CGColor;
+    renderPathBackground.layer.cornerRadius = 6.0;
+
     [self.view addSubview:statsLabel];
+    [self.view addSubview:renderPathBackground];
+    [renderPathBackground addSubview:renderPathControl];
     [NSLayoutConstraint activateConstraints:@[
         [statsLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12.0],
         [statsLabel.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:12.0],
-        [statsLabel.widthAnchor constraintEqualToConstant:140.0],
-        [statsLabel.heightAnchor constraintEqualToConstant:58.0],
+        [statsLabel.widthAnchor constraintEqualToConstant:170.0],
+        [statsLabel.heightAnchor constraintEqualToConstant:94.0],
+        [renderPathBackground.leadingAnchor constraintEqualToAnchor:statsLabel.leadingAnchor],
+        [renderPathBackground.topAnchor constraintEqualToAnchor:statsLabel.bottomAnchor constant:8.0],
+        [renderPathBackground.widthAnchor constraintEqualToConstant:232.0],
+        [renderPathBackground.heightAnchor constraintEqualToConstant:40.0],
+        [renderPathControl.centerXAnchor constraintEqualToAnchor:renderPathBackground.centerXAnchor],
+        [renderPathControl.centerYAnchor constraintEqualToAnchor:renderPathBackground.centerYAnchor],
+        [renderPathControl.widthAnchor constraintEqualToConstant:216.0],
+        [renderPathControl.heightAnchor constraintEqualToConstant:28.0],
     ]];
 
     self.statsLabel = statsLabel;
+    self.renderPathControl = renderPathControl;
     self.statsWindowStartTime = CACurrentMediaTime();
+}
+
+- (void)renderPathControlChanged:(NSSegmentedControl *)sender {
+    self.renderer.renderPath = (MBERenderPath)sender.selectedSegment;
 }
 
 - (void)mtkView:(nonnull MTKView *)view drawableSizeWillChange:(CGSize)size {
@@ -130,10 +165,13 @@
         ? [NSString stringWithFormat:@"%.2f", self.latestGPUFrameMS]
         : @"--";
 
-    self.statsLabel.stringValue = [NSString stringWithFormat:@"FPS: %.1f\nCPU: %.2f ms\nGPU: %@ ms",
+    self.statsLabel.stringValue = [NSString stringWithFormat:@"Mode: %@\nFPS: %.1f\nCPU: %.2f ms\nGPU: %@ ms\nInst: %lu/%lu",
+                                   MBERenderPathDisplayName(self.renderer.renderPath),
                                    self.currentFPS,
                                    self.latestCPUFrameMS,
-                                   gpuString];
+                                   gpuString,
+                                   (unsigned long)self.renderer.cpuVisibleInstanceCount,
+                                   (unsigned long)self.renderer.totalInstanceCount];
 }
 
 @end

@@ -1,6 +1,7 @@
 
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
+#import <simd/simd.h>
 //#import <ModelIO/ModelIO.h>
 
 NS_ASSUME_NONNULL_BEGIN
@@ -58,12 +59,17 @@ typedef struct MBEMeshFileMeshlet {
 
 @property (nonatomic, copy) MTLVertexDescriptor *vertexDescriptor;
 @property (nonatomic, copy) NSArray<MBEMeshBuffer *> *vertexBuffers;
+@property (nonatomic, strong, nullable) MBEMeshBuffer *indexBuffer;
+@property (nonatomic, assign) NSUInteger indexCount;
+@property (nonatomic, assign) MTLIndexType indexType;
 @property (nonatomic, copy) MBEMeshBuffer *meshletVertexBuffer;
 @property (nonatomic, assign) NSUInteger meshletMaxVertexCount;
 @property (nonatomic, assign) NSUInteger meshletMaxTriangleCount;
 @property (nonatomic, assign) NSUInteger vertexCount;
 @property (nonatomic, assign) NSUInteger triangleCount;
 @property (nonatomic, assign) NSUInteger meshletCount;
+@property (nonatomic, assign) simd_float3 boundsCenter;
+@property (nonatomic, assign) float boundsRadius;
 @property (nonatomic, copy) NSArray<MBESubmesh *> *submeshes;
 
 - (instancetype _Nullable)initWithURL:(NSURL *)url device:(id<MTLDevice>)device;

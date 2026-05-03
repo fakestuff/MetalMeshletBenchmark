@@ -32,6 +32,18 @@ struct MeshletPrimitive {
     float4 color [[flat]];
 };
 
+struct RasterVertexIn {
+    float3 position [[attribute(0)]];
+    float3 normal [[attribute(1)]];
+    float2 texCoords [[attribute(2)]];
+};
+
+struct RasterVertexOut {
+    float4 position [[position]];
+    float3 normal;
+    float2 texCoords;
+};
+
 struct MeshletDescriptor {
     uint vertexOffset;
     uint vertexCount;
@@ -46,6 +58,7 @@ struct MeshletDescriptor {
 
 struct ObjectPayload {
     uint meshletIndices[kMeshletsPerObject];
+    uint instanceIndex;
 };
 
 /// Extracts the six frustum planes determined by the provided matrix.
@@ -77,42 +90,97 @@ static bool cone_is_backfacing(float3 coneApex, float3 coneAxis, float coneCutof
     return (dot(normalize(coneApex - cameraPosition), coneAxis) >= coneCutoff);
 }
 
-// https://www.ronja-tutorials.com/post/041-hsv-colorspace/
-static float3 hue2rgb(float hue) {
-    hue = fract(hue); //only use fractional part of hue, making it loop
-    float r = abs(hue * 6 - 3) - 1; //red
-    float g = 2 - abs(hue * 6 - 2); //green
-    float b = 2 - abs(hue * 6 - 4); //blue
-    float3 rgb = float3(r,g,b); //combine components
-    rgb = saturate(rgb); //clamp between 0 and 1
-    return rgb;
+static uint hash_uint(uint value) {
+    value = ((value >> ((value >> 28) + 4)) ^ value) * 277803737u;
+    return (value >> 22) ^ value;
+}
+
+static float3 hash_color(uint clusterID) {
+    uint value = hash_uint(clusterID * 747796405u + 2891336453u);
+    float3 color = float3(value & 255u, (value >> 8) & 255u, (value >> 16) & 255u) / 255.0f;
+    return color * 0.75f + 0.25f;
+}
+
+static float4 apply_lighting(float3 color, float3 normal) {
+    float3 N = normalize(normal);
+    float3 L = normalize(float3(1, 1, 1));
+
+    float ambientIntensity = 0.1f;
+    float diffuseIntensity = saturate(dot(N, L));
+
+    return float4(color * saturate(ambientIntensity + diffuseIntensity), 1.0f);
+}
+
+[[vertex]]
+RasterVertexOut indexed_vertex_main(RasterVertexIn in [[stage_in]],
+                                    constant InstanceData *instances [[buffer(1)]],
+                                    uint instanceID [[instance_id]])
+{
+    constant InstanceData &instance = instances[instanceID];
+
+    RasterVertexOut out;
+    out.position = instance.modelViewProjectionMatrix * float4(in.position, 1.0f);
+    out.normal = (instance.normalMatrix * float4(in.normal, 0.0f)).xyz;
+    out.texCoords = in.texCoords;
+    return out;
+}
+
+[[vertex]]
+RasterVertexOut vertex_pulling_vertex_main(uint vertexID [[vertex_id]],
+                                           uint instanceID [[instance_id]],
+                                           device const Vertex *vertices [[buffer(0)]],
+                                           device const uint *indices [[buffer(1)]],
+                                           constant InstanceData *instances [[buffer(2)]])
+{
+    uint index = indices[vertexID];
+    device const Vertex &meshVertex = vertices[index];
+    constant InstanceData &instance = instances[instanceID];
+
+    RasterVertexOut out;
+    out.position = instance.modelViewProjectionMatrix * float4(meshVertex.position, 1.0f);
+    out.normal = (instance.normalMatrix * float4(meshVertex.normal, 0.0f)).xyz;
+    out.texCoords = meshVertex.texCoords;
+    return out;
+}
+
+[[fragment]]
+float4 raster_fragment_main(RasterVertexOut in [[stage_in]],
+                            uint primitiveID [[primitive_id]])
+{
+    uint clusterID = primitiveID / 256u;
+    return apply_lighting(hash_color(clusterID), in.normal);
 }
 
 [[object, max_total_threadgroups_per_mesh_grid(kMeshletsPerObject)]]
 void object_main(device const MeshletDescriptor *meshlets [[buffer(0)]],
-                 constant InstanceData &instance          [[buffer(1)]],
+                 constant InstanceData *instances         [[buffer(1)]],
                  constant MeshData &mesh                  [[buffer(2)]],
-                 uint meshletIndex          [[thread_position_in_grid]],
-                 uint threadIndex    [[thread_position_in_threadgroup]],
-                 object_data ObjectPayload &outObject       [[payload]],
+                 uint3 threadPositionInGrid                [[thread_position_in_grid]],
+                 uint threadIndex                          [[thread_position_in_threadgroup]],
+                 object_data ObjectPayload &outObject      [[payload]],
                  mesh_grid_properties outGrid)
 {
-    if (meshletIndex >= mesh.meshletCount) {
-        return;
+    uint meshletIndex = threadPositionInGrid.x;
+    uint instanceIndex = threadPositionInGrid.y;
+
+    if (threadIndex == 0) {
+        outObject.instanceIndex = instanceIndex;
     }
-    
-    // Look up the meshlet this thread will determine the visibility of
-    device const MeshletDescriptor &meshlet = meshlets[meshletIndex];
 
-    // Perform culling tests and determine if our meshlet is potentially visible
-    float4 frustumPlanes[6];
-    extract_frustum_planes(instance.modelViewProjectionMatrix, frustumPlanes);
-    bool frustumCulled = !sphere_intersects_frustum(frustumPlanes, meshlet.boundsCenter, meshlet.boundsRadius);
+    int passed = 0;
+    if (meshletIndex < mesh.meshletCount) {
+        constant InstanceData &instance = instances[instanceIndex];
+        device const MeshletDescriptor &meshlet = meshlets[meshletIndex];
 
-    float3 cameraPosition = instance.inverseModelViewMatrix[3].xyz;
-    bool normalConeCulled = cone_is_backfacing(meshlet.coneApex, meshlet.coneAxis, meshlet.coneCutoff, cameraPosition);
+        float4 frustumPlanes[6];
+        extract_frustum_planes(instance.modelViewProjectionMatrix, frustumPlanes);
+        bool frustumCulled = !sphere_intersects_frustum(frustumPlanes, meshlet.boundsCenter, meshlet.boundsRadius);
 
-    int passed = (!frustumCulled && !normalConeCulled) ? 1 : 0;
+        float3 cameraPosition = instance.inverseModelViewMatrix[3].xyz;
+        bool normalConeCulled = cone_is_backfacing(meshlet.coneApex, meshlet.coneAxis, meshlet.coneCutoff, cameraPosition);
+
+        passed = (!frustumCulled && !normalConeCulled) ? 1 : 0;
+    }
 
     // Perform a prefix scan to determine the number of meshlets not culled by lower-indexed threads
     // in our SIMDgroup, which tells us which payload index to write our meshlet index into iff it passed.
@@ -140,13 +208,14 @@ void mesh_main(object_data ObjectPayload const& object   [[payload]],
                constant MeshletDescriptor *meshlets    [[buffer(1)]],
                constant uint *meshletVertices          [[buffer(2)]],
                constant uchar *meshletTriangles        [[buffer(3)]],
-               constant InstanceData &instance         [[buffer(4)]],
+               constant InstanceData *instances        [[buffer(4)]],
                uint payloadIndex    [[threadgroup_position_in_grid]],
                uint threadIndex   [[thread_position_in_threadgroup]],
                Meshlet outMesh)
 {
     uint meshletIndex = object.meshletIndices[payloadIndex];
     constant MeshletDescriptor &meshlet = meshlets[meshletIndex];
+    constant InstanceData &instance = instances[object.instanceIndex];
 
     if (threadIndex < meshlet.vertexCount) {
         device const Vertex &meshVertex = meshVertices[meshletVertices[meshlet.vertexOffset + threadIndex]];
@@ -164,9 +233,7 @@ void mesh_main(object_data ObjectPayload const& object   [[payload]],
         outMesh.set_index(i + 2, meshletTriangles[meshlet.triangleOffset + i + 2]);
 
         MeshletPrimitive prim = {
-            // Map meshlet indices to widely-spaced values around the color wheel
-            // to give each meshlet a pseudo-random color
-            .color = float4(hue2rgb(meshletIndex * 1.71f), 1)
+            .color = float4(hash_color(meshletIndex), 1)
         };
         outMesh.set_primitive(threadIndex, prim);
     }
@@ -182,14 +249,6 @@ struct FragmentIn {
 };
 
 [[fragment]]
-float4 fragment_main(FragmentIn in [[stage_in]]) {
-    float4 color = in.prim.color;
-
-    float3 N = normalize(in.vert.normal);
-    float3 L = normalize(float3(1, 1, 1));
-
-    float ambientIntensity = 0.1f;
-    float diffuseIntensity = saturate(dot(N, L));
-
-    return float4(color.rgb * saturate(ambientIntensity + diffuseIntensity), 1.0f);
+float4 meshlet_fragment_main(FragmentIn in [[stage_in]]) {
+    return apply_lighting(in.prim.color.rgb, in.vert.normal);
 }

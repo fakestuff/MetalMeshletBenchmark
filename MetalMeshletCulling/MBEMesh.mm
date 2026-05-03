@@ -17,6 +17,50 @@ typedef struct MBEVertex {
 static const NSUInteger kDefaultMeshletMaxVertexCount = 128;
 static const NSUInteger kDefaultMeshletMaxTriangleCount = 256;
 
+static void MBEComputeBoundingSphere(const MBEVertex *vertices,
+                                     NSUInteger vertexCount,
+                                     simd_float3 *centerOut,
+                                     float *radiusOut) {
+    if (vertexCount == 0) {
+        *centerOut = (simd_float3){ 0.0f, 0.0f, 0.0f };
+        *radiusOut = 0.0f;
+        return;
+    }
+
+    float minX = vertices[0].x;
+    float minY = vertices[0].y;
+    float minZ = vertices[0].z;
+    float maxX = minX;
+    float maxY = minY;
+    float maxZ = minZ;
+
+    for (NSUInteger i = 1; i < vertexCount; ++i) {
+        minX = std::min(minX, vertices[i].x);
+        minY = std::min(minY, vertices[i].y);
+        minZ = std::min(minZ, vertices[i].z);
+        maxX = std::max(maxX, vertices[i].x);
+        maxY = std::max(maxY, vertices[i].y);
+        maxZ = std::max(maxZ, vertices[i].z);
+    }
+
+    simd_float3 center = (simd_float3){
+        (minX + maxX) * 0.5f,
+        (minY + maxY) * 0.5f,
+        (minZ + maxZ) * 0.5f
+    };
+
+    float radiusSquared = 0.0f;
+    for (NSUInteger i = 0; i < vertexCount; ++i) {
+        float dx = vertices[i].x - center.x;
+        float dy = vertices[i].y - center.y;
+        float dz = vertices[i].z - center.z;
+        radiusSquared = std::max(radiusSquared, dx * dx + dy * dy + dz * dz);
+    }
+
+    *centerOut = center;
+    *radiusOut = sqrtf(radiusSquared);
+}
+
 static MTLVertexDescriptor *MBEMakeMetalVertexDescriptor(void) {
     MTLVertexDescriptor *vertexDescriptor = [MTLVertexDescriptor vertexDescriptor];
     vertexDescriptor.attributes[0].format = MTLVertexFormatFloat3;
@@ -91,6 +135,12 @@ static MDLVertexDescriptor *MBEMakeModelIOVertexDescriptor(void) {
         _meshletMaxTriangleCount = header.meshletMaxTriangleCount;
         _vertexCount = header.vertexDataLength / sizeof(MBEVertex);
         _meshletCount = header.meshletCount;
+        _indexCount = 0;
+        _indexType = MTLIndexTypeUInt32;
+        MBEComputeBoundingSphere((const MBEVertex *)(meshBytes + header.vertexDataOffset),
+                                 _vertexCount,
+                                 &_boundsCenter,
+                                 &_boundsRadius);
 
         _vertexDescriptor = MBEMakeMetalVertexDescriptor();
 
@@ -272,8 +322,11 @@ static MDLVertexDescriptor *MBEMakeModelIOVertexDescriptor(void) {
         _meshletMaxVertexCount = meshletMaxVertexCount;
         _meshletMaxTriangleCount = meshletMaxTriangleCount;
         _vertexCount = vertices.size();
-        _triangleCount = totalTriangleCount;
+        _indexCount = indices.size();
+        _indexType = MTLIndexTypeUInt32;
+        _triangleCount = indices.size() / 3;
         _meshletCount = meshletCount;
+        MBEComputeBoundingSphere(vertices.data(), vertices.size(), &_boundsCenter, &_boundsRadius);
         _vertexDescriptor = MBEMakeMetalVertexDescriptor();
 
         id<MTLBuffer> vertexBuffer = [device newBufferWithBytes:vertices.data()
@@ -281,6 +334,12 @@ static MDLVertexDescriptor *MBEMakeModelIOVertexDescriptor(void) {
                                                          options:MTLResourceStorageModeShared];
         vertexBuffer.label = @"Runtime OBJ Mesh Vertices";
         _vertexBuffers = @[[[MBEMeshBuffer alloc] initWithBuffer:vertexBuffer offset:0]];
+
+        id<MTLBuffer> indexBuffer = [device newBufferWithBytes:indices.data()
+                                                         length:indices.size() * sizeof(uint32_t)
+                                                        options:MTLResourceStorageModeShared];
+        indexBuffer.label = @"Runtime OBJ Mesh Indices";
+        _indexBuffer = [[MBEMeshBuffer alloc] initWithBuffer:indexBuffer offset:0];
 
         id<MTLBuffer> meshletVertexBuffer = [device newBufferWithBytes:meshletVertices.data()
                                                                   length:meshletVertices.size() * sizeof(uint32_t)
@@ -304,13 +363,17 @@ static MDLVertexDescriptor *MBEMakeModelIOVertexDescriptor(void) {
         submesh.meshletCount = meshletCount;
         _submeshes = @[ submesh ];
 
-        NSLog(@"Loaded runtime OBJ %@: %lu vertices, %lu triangles, %lu meshlets (%lu/%lu)",
+        NSLog(@"Loaded runtime OBJ %@: %lu vertices, %lu triangles, %lu meshlets (%lu/%lu), bounds center=(%.3f, %.3f, %.3f), radius=%.3f",
               url.lastPathComponent,
               (unsigned long)_vertexCount,
               (unsigned long)_triangleCount,
               (unsigned long)_meshletCount,
               (unsigned long)_meshletMaxVertexCount,
-              (unsigned long)_meshletMaxTriangleCount);
+              (unsigned long)_meshletMaxTriangleCount,
+              _boundsCenter.x,
+              _boundsCenter.y,
+              _boundsCenter.z,
+              _boundsRadius);
     }
 
     return self;
