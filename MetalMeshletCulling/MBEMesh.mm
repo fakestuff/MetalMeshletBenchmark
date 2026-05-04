@@ -16,6 +16,30 @@ typedef struct MBEVertex {
 
 static const NSUInteger kDefaultMeshletMaxVertexCount = 128;
 static const NSUInteger kDefaultMeshletMaxTriangleCount = 256;
+static const float kDefaultOverdrawThreshold = 1.05f;
+
+static NSString *MBEOptimizationOptionsDescription(MBEMeshOptimizationOptions options) {
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
+    if (options & MBEMeshOptimizationOptionRemap) {
+        [names addObject:@"remap"];
+    }
+    if (options & MBEMeshOptimizationOptionVertexCache) {
+        [names addObject:@"vertexCache"];
+    }
+    if (options & MBEMeshOptimizationOptionOverdraw) {
+        [names addObject:@"overdraw"];
+    }
+    if (options & MBEMeshOptimizationOptionVertexFetch) {
+        [names addObject:@"vertexFetch"];
+    }
+    if (options & MBEMeshOptimizationOptionMeshlets) {
+        [names addObject:@"meshlets"];
+    }
+    if (options & MBEMeshOptimizationOptionOptimizeMeshlet) {
+        [names addObject:@"optimizeMeshlet"];
+    }
+    return names.count > 0 ? [names componentsJoinedByString:@"|"] : @"raw";
+}
 
 static void MBEComputeBoundingSphere(const MBEVertex *vertices,
                                      NSUInteger vertexCount,
@@ -199,7 +223,20 @@ static MDLVertexDescriptor *MBEMakeModelIOVertexDescriptor(void) {
                         device:(id<MTLDevice>)device
          meshletMaxVertexCount:(NSUInteger)meshletMaxVertexCount
        meshletMaxTriangleCount:(NSUInteger)meshletMaxTriangleCount {
+    return [self initWithOBJURL:url
+                         device:device
+          meshletMaxVertexCount:meshletMaxVertexCount
+        meshletMaxTriangleCount:meshletMaxTriangleCount
+            optimizationOptions:MBEMeshOptimizationOptionMeshlets | MBEMeshOptimizationOptionOptimizeMeshlet];
+}
+
+- (instancetype)initWithOBJURL:(NSURL *)url
+                        device:(id<MTLDevice>)device
+         meshletMaxVertexCount:(NSUInteger)meshletMaxVertexCount
+       meshletMaxTriangleCount:(NSUInteger)meshletMaxTriangleCount
+           optimizationOptions:(MBEMeshOptimizationOptions)optimizationOptions {
     if (self = [super init]) {
+        _optimizationOptions = optimizationOptions;
         NSError *error = nil;
         MDLAsset *asset = [[MDLAsset alloc] initWithURL:url
                                        vertexDescriptor:MBEMakeModelIOVertexDescriptor()
@@ -244,79 +281,128 @@ static MDLVertexDescriptor *MBEMakeModelIOVertexDescriptor(void) {
             return nil;
         }
 
+        if (optimizationOptions & MBEMeshOptimizationOptionRemap) {
+            std::vector<unsigned int> remap(vertices.size());
+            size_t remappedVertexCount = meshopt_generateVertexRemap(remap.data(),
+                                                                     indices.data(),
+                                                                     indices.size(),
+                                                                     vertices.data(),
+                                                                     vertices.size(),
+                                                                     sizeof(MBEVertex));
+
+            std::vector<uint32_t> remappedIndices(indices.size());
+            std::vector<MBEVertex> remappedVertices(remappedVertexCount);
+            meshopt_remapIndexBuffer(remappedIndices.data(), indices.data(), indices.size(), remap.data());
+            meshopt_remapVertexBuffer(remappedVertices.data(), vertices.data(), vertices.size(), sizeof(MBEVertex), remap.data());
+            indices = std::move(remappedIndices);
+            vertices = std::move(remappedVertices);
+        }
+
+        if (optimizationOptions & MBEMeshOptimizationOptionVertexCache) {
+            meshopt_optimizeVertexCache(indices.data(), indices.data(), indices.size(), vertices.size());
+        }
+
+        if (optimizationOptions & MBEMeshOptimizationOptionOverdraw) {
+            meshopt_optimizeOverdraw(indices.data(),
+                                     indices.data(),
+                                     indices.size(),
+                                     &vertices[0].x,
+                                     vertices.size(),
+                                     sizeof(MBEVertex),
+                                     kDefaultOverdrawThreshold);
+        }
+
+        if (optimizationOptions & MBEMeshOptimizationOptionVertexFetch) {
+            std::vector<MBEVertex> fetchOptimizedVertices(vertices.size());
+            size_t fetchOptimizedVertexCount = meshopt_optimizeVertexFetch(fetchOptimizedVertices.data(),
+                                                                           indices.data(),
+                                                                           indices.size(),
+                                                                           vertices.data(),
+                                                                           vertices.size(),
+                                                                           sizeof(MBEVertex));
+            fetchOptimizedVertices.resize(fetchOptimizedVertexCount);
+            vertices = std::move(fetchOptimizedVertices);
+        }
+
         meshletMaxVertexCount = std::max<NSUInteger>(3, std::min<NSUInteger>(meshletMaxVertexCount, 256));
         meshletMaxTriangleCount = std::max<NSUInteger>(1, std::min<NSUInteger>(meshletMaxTriangleCount, 512));
 
-        const float coneWeight = 0.2f;
-        size_t maxMeshletCount = meshopt_buildMeshletsBound(indices.size(), meshletMaxVertexCount, meshletMaxTriangleCount);
-        std::vector<meshopt_Meshlet> meshletsInternal(maxMeshletCount);
-        std::vector<uint32_t> meshletVertices(maxMeshletCount * meshletMaxVertexCount);
-        std::vector<uint8_t> meshletTriangles(maxMeshletCount * meshletMaxTriangleCount * 3);
-
-        size_t meshletCount = meshopt_buildMeshlets(meshletsInternal.data(),
-                                                    meshletVertices.data(),
-                                                    meshletTriangles.data(),
-                                                    indices.data(),
-                                                    indices.size(),
-                                                    &vertices[0].x,
-                                                    vertices.size(),
-                                                    sizeof(MBEVertex),
-                                                    meshletMaxVertexCount,
-                                                    meshletMaxTriangleCount,
-                                                    coneWeight);
-        if (meshletCount == 0) {
-            NSLog(@"meshoptimizer generated no meshlets for %@", url.path);
-            return nil;
-        }
-
-        meshletsInternal.resize(meshletCount);
-        const meshopt_Meshlet &lastMeshlet = meshletsInternal.back();
-        meshletVertices.resize(lastMeshlet.vertex_offset + lastMeshlet.vertex_count);
-        meshletTriangles.resize(lastMeshlet.triangle_offset + lastMeshlet.triangle_count * 3);
-
+        size_t meshletCount = 0;
+        std::vector<meshopt_Meshlet> meshletsInternal;
+        std::vector<uint32_t> meshletVertices;
+        std::vector<uint8_t> meshletTriangles;
         std::vector<MBEMeshFileMeshlet> meshletRecords;
-        meshletRecords.reserve(meshletCount);
 
-        NSUInteger totalTriangleCount = 0;
-        for (const meshopt_Meshlet &meshlet : meshletsInternal) {
-            meshopt_optimizeMeshlet(meshletVertices.data() + meshlet.vertex_offset,
-                                    meshletTriangles.data() + meshlet.triangle_offset,
-                                    meshlet.triangle_count,
-                                    meshlet.vertex_count);
+        if (optimizationOptions & MBEMeshOptimizationOptionMeshlets) {
+            const float coneWeight = 0.2f;
+            size_t maxMeshletCount = meshopt_buildMeshletsBound(indices.size(), meshletMaxVertexCount, meshletMaxTriangleCount);
+            meshletsInternal.resize(maxMeshletCount);
+            meshletVertices.resize(maxMeshletCount * meshletMaxVertexCount);
+            meshletTriangles.resize(maxMeshletCount * meshletMaxTriangleCount * 3);
 
-            meshopt_Bounds bounds = meshopt_computeMeshletBounds(meshletVertices.data() + meshlet.vertex_offset,
-                                                                 meshletTriangles.data() + meshlet.triangle_offset,
-                                                                 meshlet.triangle_count,
-                                                                 &vertices[0].x,
-                                                                 vertices.size(),
-                                                                 sizeof(MBEVertex));
+            meshletCount = meshopt_buildMeshlets(meshletsInternal.data(),
+                                                 meshletVertices.data(),
+                                                 meshletTriangles.data(),
+                                                 indices.data(),
+                                                 indices.size(),
+                                                 &vertices[0].x,
+                                                 vertices.size(),
+                                                 sizeof(MBEVertex),
+                                                 meshletMaxVertexCount,
+                                                 meshletMaxTriangleCount,
+                                                 coneWeight);
+            if (meshletCount == 0) {
+                NSLog(@"meshoptimizer generated no meshlets for %@", url.path);
+                return nil;
+            }
 
-            MBEMeshFileMeshlet meshletRecord = {
-                .vertexOffset = meshlet.vertex_offset,
-                .vertexCount = meshlet.vertex_count,
-                .triangleOffset = meshlet.triangle_offset,
-                .triangleCount = meshlet.triangle_count,
-                .bounds = {
-                    bounds.center[0],
-                    bounds.center[1],
-                    bounds.center[2],
-                    bounds.radius
-                },
-                .coneApex = {
-                    bounds.cone_apex[0],
-                    bounds.cone_apex[1],
-                    bounds.cone_apex[2],
-                },
-                .coneAxis = {
-                    bounds.cone_axis[0],
-                    bounds.cone_axis[1],
-                    bounds.cone_axis[2],
-                },
-                .coneCutoff = bounds.cone_cutoff,
-                .pad = 0.0f,
-            };
-            meshletRecords.push_back(meshletRecord);
-            totalTriangleCount += meshlet.triangle_count;
+            meshletsInternal.resize(meshletCount);
+            const meshopt_Meshlet &lastMeshlet = meshletsInternal.back();
+            meshletVertices.resize(lastMeshlet.vertex_offset + lastMeshlet.vertex_count);
+            meshletTriangles.resize(lastMeshlet.triangle_offset + lastMeshlet.triangle_count * 3);
+            meshletRecords.reserve(meshletCount);
+
+            for (const meshopt_Meshlet &meshlet : meshletsInternal) {
+                if (optimizationOptions & MBEMeshOptimizationOptionOptimizeMeshlet) {
+                    meshopt_optimizeMeshlet(meshletVertices.data() + meshlet.vertex_offset,
+                                            meshletTriangles.data() + meshlet.triangle_offset,
+                                            meshlet.triangle_count,
+                                            meshlet.vertex_count);
+                }
+
+                meshopt_Bounds bounds = meshopt_computeMeshletBounds(meshletVertices.data() + meshlet.vertex_offset,
+                                                                     meshletTriangles.data() + meshlet.triangle_offset,
+                                                                     meshlet.triangle_count,
+                                                                     &vertices[0].x,
+                                                                     vertices.size(),
+                                                                     sizeof(MBEVertex));
+
+                MBEMeshFileMeshlet meshletRecord = {
+                    .vertexOffset = meshlet.vertex_offset,
+                    .vertexCount = meshlet.vertex_count,
+                    .triangleOffset = meshlet.triangle_offset,
+                    .triangleCount = meshlet.triangle_count,
+                    .bounds = {
+                        bounds.center[0],
+                        bounds.center[1],
+                        bounds.center[2],
+                        bounds.radius
+                    },
+                    .coneApex = {
+                        bounds.cone_apex[0],
+                        bounds.cone_apex[1],
+                        bounds.cone_apex[2],
+                    },
+                    .coneAxis = {
+                        bounds.cone_axis[0],
+                        bounds.cone_axis[1],
+                        bounds.cone_axis[2],
+                    },
+                    .coneCutoff = bounds.cone_cutoff,
+                    .pad = 0.0f,
+                };
+                meshletRecords.push_back(meshletRecord);
+            }
         }
 
         _meshletMaxVertexCount = meshletMaxVertexCount;
@@ -341,30 +427,35 @@ static MDLVertexDescriptor *MBEMakeModelIOVertexDescriptor(void) {
         indexBuffer.label = @"Runtime OBJ Mesh Indices";
         _indexBuffer = [[MBEMeshBuffer alloc] initWithBuffer:indexBuffer offset:0];
 
-        id<MTLBuffer> meshletVertexBuffer = [device newBufferWithBytes:meshletVertices.data()
-                                                                  length:meshletVertices.size() * sizeof(uint32_t)
-                                                                 options:MTLResourceStorageModeShared];
-        meshletVertexBuffer.label = @"Runtime OBJ Meshlet Vertex Map";
-        _meshletVertexBuffer = [[MBEMeshBuffer alloc] initWithBuffer:meshletVertexBuffer offset:0];
+        if (meshletCount > 0) {
+            id<MTLBuffer> meshletVertexBuffer = [device newBufferWithBytes:meshletVertices.data()
+                                                                      length:meshletVertices.size() * sizeof(uint32_t)
+                                                                     options:MTLResourceStorageModeShared];
+            meshletVertexBuffer.label = @"Runtime OBJ Meshlet Vertex Map";
+            _meshletVertexBuffer = [[MBEMeshBuffer alloc] initWithBuffer:meshletVertexBuffer offset:0];
 
-        id<MTLBuffer> meshletBuffer = [device newBufferWithBytes:meshletRecords.data()
-                                                          length:meshletRecords.size() * sizeof(MBEMeshFileMeshlet)
-                                                         options:MTLResourceStorageModeShared];
-        meshletBuffer.label = @"Runtime OBJ Meshlet Descriptors";
+            id<MTLBuffer> meshletBuffer = [device newBufferWithBytes:meshletRecords.data()
+                                                              length:meshletRecords.size() * sizeof(MBEMeshFileMeshlet)
+                                                             options:MTLResourceStorageModeShared];
+            meshletBuffer.label = @"Runtime OBJ Meshlet Descriptors";
 
-        id<MTLBuffer> meshletTriangleBuffer = [device newBufferWithBytes:meshletTriangles.data()
-                                                                  length:meshletTriangles.size() * sizeof(uint8_t)
-                                                                 options:MTLResourceStorageModeShared];
-        meshletTriangleBuffer.label = @"Runtime OBJ Meshlet Triangles";
+            id<MTLBuffer> meshletTriangleBuffer = [device newBufferWithBytes:meshletTriangles.data()
+                                                                      length:meshletTriangles.size() * sizeof(uint8_t)
+                                                                     options:MTLResourceStorageModeShared];
+            meshletTriangleBuffer.label = @"Runtime OBJ Meshlet Triangles";
 
-        MBESubmesh *submesh = [MBESubmesh new];
-        submesh.meshletBuffer = [[MBEMeshBuffer alloc] initWithBuffer:meshletBuffer offset:0];
-        submesh.meshletTriangleBuffer = [[MBEMeshBuffer alloc] initWithBuffer:meshletTriangleBuffer offset:0];
-        submesh.meshletCount = meshletCount;
-        _submeshes = @[ submesh ];
+            MBESubmesh *submesh = [MBESubmesh new];
+            submesh.meshletBuffer = [[MBEMeshBuffer alloc] initWithBuffer:meshletBuffer offset:0];
+            submesh.meshletTriangleBuffer = [[MBEMeshBuffer alloc] initWithBuffer:meshletTriangleBuffer offset:0];
+            submesh.meshletCount = meshletCount;
+            _submeshes = @[ submesh ];
+        } else {
+            _submeshes = @[];
+        }
 
-        NSLog(@"Loaded runtime OBJ %@: %lu vertices, %lu triangles, %lu meshlets (%lu/%lu), bounds center=(%.3f, %.3f, %.3f), radius=%.3f",
+        NSLog(@"Loaded runtime OBJ %@ [%@]: %lu vertices, %lu triangles, %lu meshlets (%lu/%lu), bounds center=(%.3f, %.3f, %.3f), radius=%.3f",
               url.lastPathComponent,
+              MBEOptimizationOptionsDescription(optimizationOptions),
               (unsigned long)_vertexCount,
               (unsigned long)_triangleCount,
               (unsigned long)_meshletCount,

@@ -23,6 +23,10 @@
 		8360B7E629D0000200A9706E /* allocator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7ED29D0000900A9706E /* allocator.cpp */; };
 		8360B7E729D0000300A9706E /* clusterizer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7EE29D0000A00A9706E /* clusterizer.cpp */; };
 		8360B7E829D0000400A9706E /* meshletutils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7EF29D0000B00A9706E /* meshletutils.cpp */; };
+		8360B80129D1000100A9706E /* indexgenerator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B80529D1000500A9706E /* indexgenerator.cpp */; settings = {COMPILER_FLAGS = "-Wno-comma"; }; };
+		8360B80229D1000200A9706E /* vcacheoptimizer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B80629D1000600A9706E /* vcacheoptimizer.cpp */; settings = {COMPILER_FLAGS = "-Wno-comma"; }; };
+		8360B80329D1000300A9706E /* overdrawoptimizer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B80729D1000700A9706E /* overdrawoptimizer.cpp */; settings = {COMPILER_FLAGS = "-Wno-comma"; }; };
+		8360B80429D1000400A9706E /* vfetchoptimizer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B80829D1000800A9706E /* vfetchoptimizer.cpp */; settings = {COMPILER_FLAGS = "-Wno-comma"; }; };
 		8360B7E929D0000500A9706E /* allocator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7ED29D0000900A9706E /* allocator.cpp */; };
 		8360B7EA29D0000600A9706E /* clusterizer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7EE29D0000A00A9706E /* clusterizer.cpp */; };
 		8360B7EB29D0000700A9706E /* meshletutils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8360B7EF29D0000B00A9706E /* meshletutils.cpp */; };
@@ -63,6 +67,10 @@
 		8360B7EE29D0000A00A9706E /* clusterizer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = third_party/meshoptimizer/src/clusterizer.cpp; sourceTree = SOURCE_ROOT; };
 		8360B7EF29D0000B00A9706E /* meshletutils.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = third_party/meshoptimizer/src/meshletutils.cpp; sourceTree = SOURCE_ROOT; };
 		8360B7F029D0000C00A9706E /* meshoptimizer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = third_party/meshoptimizer/src/meshoptimizer.h; sourceTree = SOURCE_ROOT; };
+		8360B80529D1000500A9706E /* indexgenerator.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = third_party/meshoptimizer/src/indexgenerator.cpp; sourceTree = SOURCE_ROOT; };
+		8360B80629D1000600A9706E /* vcacheoptimizer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = third_party/meshoptimizer/src/vcacheoptimizer.cpp; sourceTree = SOURCE_ROOT; };
+		8360B80729D1000700A9706E /* overdrawoptimizer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = third_party/meshoptimizer/src/overdrawoptimizer.cpp; sourceTree = SOURCE_ROOT; };
+		8360B80829D1000800A9706E /* vfetchoptimizer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = third_party/meshoptimizer/src/vfetchoptimizer.cpp; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -156,7 +164,11 @@
 				8360B7F029D0000C00A9706E /* meshoptimizer.h */,
 				8360B7ED29D0000900A9706E /* allocator.cpp */,
 				8360B7EE29D0000A00A9706E /* clusterizer.cpp */,
+				8360B80529D1000500A9706E /* indexgenerator.cpp */,
 				8360B7EF29D0000B00A9706E /* meshletutils.cpp */,
+				8360B80729D1000700A9706E /* overdrawoptimizer.cpp */,
+				8360B80629D1000600A9706E /* vcacheoptimizer.cpp */,
+				8360B80829D1000800A9706E /* vfetchoptimizer.cpp */,
 			);
 			name = meshoptimizer;
 			sourceTree = "<group>";
@@ -255,7 +267,11 @@
 			files = (
 				8360B7E629D0000200A9706E /* allocator.cpp in Sources */,
 				8360B7E729D0000300A9706E /* clusterizer.cpp in Sources */,
+				8360B80129D1000100A9706E /* indexgenerator.cpp in Sources */,
 				8360B7E829D0000400A9706E /* meshletutils.cpp in Sources */,
+				8360B80329D1000300A9706E /* overdrawoptimizer.cpp in Sources */,
+				8360B80229D1000200A9706E /* vcacheoptimizer.cpp in Sources */,
+				8360B80429D1000400A9706E /* vfetchoptimizer.cpp in Sources */,
 				8360B7DC29C7854F00A9706E /* MBEMeshletRenderer.m in Sources */,
 				8360B7D529C660A800A9706E /* Shaders.metal in Sources */,
 				8360B7B629C6390700A9706E /* MBEViewController.m in Sources */,

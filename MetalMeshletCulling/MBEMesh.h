@@ -6,6 +6,15 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+typedef NS_OPTIONS(NSUInteger, MBEMeshOptimizationOptions) {
+    MBEMeshOptimizationOptionRemap = 1 << 0,
+    MBEMeshOptimizationOptionVertexCache = 1 << 1,
+    MBEMeshOptimizationOptionOverdraw = 1 << 2,
+    MBEMeshOptimizationOptionVertexFetch = 1 << 3,
+    MBEMeshOptimizationOptionMeshlets = 1 << 4,
+    MBEMeshOptimizationOptionOptimizeMeshlet = 1 << 5,
+};
+
 typedef struct MBEMeshFileHeader {
     uint32_t meshletMaxVertexCount;
     uint32_t meshletMaxTriangleCount;
@@ -62,12 +71,13 @@ typedef struct MBEMeshFileMeshlet {
 @property (nonatomic, strong, nullable) MBEMeshBuffer *indexBuffer;
 @property (nonatomic, assign) NSUInteger indexCount;
 @property (nonatomic, assign) MTLIndexType indexType;
-@property (nonatomic, copy) MBEMeshBuffer *meshletVertexBuffer;
+@property (nonatomic, strong, nullable) MBEMeshBuffer *meshletVertexBuffer;
 @property (nonatomic, assign) NSUInteger meshletMaxVertexCount;
 @property (nonatomic, assign) NSUInteger meshletMaxTriangleCount;
 @property (nonatomic, assign) NSUInteger vertexCount;
 @property (nonatomic, assign) NSUInteger triangleCount;
 @property (nonatomic, assign) NSUInteger meshletCount;
+@property (nonatomic, assign) MBEMeshOptimizationOptions optimizationOptions;
 @property (nonatomic, assign) simd_float3 boundsCenter;
 @property (nonatomic, assign) float boundsRadius;
 @property (nonatomic, copy) NSArray<MBESubmesh *> *submeshes;
@@ -78,6 +88,11 @@ typedef struct MBEMeshFileMeshlet {
                                   device:(id<MTLDevice>)device
                    meshletMaxVertexCount:(NSUInteger)meshletMaxVertexCount
                  meshletMaxTriangleCount:(NSUInteger)meshletMaxTriangleCount;
+- (instancetype _Nullable)initWithOBJURL:(NSURL *)url
+                                  device:(id<MTLDevice>)device
+                   meshletMaxVertexCount:(NSUInteger)meshletMaxVertexCount
+                 meshletMaxTriangleCount:(NSUInteger)meshletMaxTriangleCount
+                     optimizationOptions:(MBEMeshOptimizationOptions)optimizationOptions;
 
 @end
 
