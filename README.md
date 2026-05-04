@@ -75,7 +75,7 @@ Test scene:
 
 `GPU Frustum` for VS/PS uses compute compaction + indirect draw. Meshlet mode has one object-shader `Frustum` variant, so that value is repeated in the two frustum comparison rows below. `Full` and `Full+HiZ` are Meshlet-only normal-cone paths, so they do not have direct VS/PS equivalents.
 
-### raw
+### raw (obj index order)
 
 | Culling setup | Indexed GPU ms | Pulling GPU ms | Meshlet GPU ms |
 | --- | ---: | ---: | ---: |
@@ -85,7 +85,7 @@ Test scene:
 | Meshlet Full cone | - | - | 32.33 |
 | HiZ | 70.10 | 71.98 | 13.52 |
 
-### remap
+### remap (meshoptimizer vertex+index remap)
 
 | Culling setup | Indexed GPU ms | Pulling GPU ms | Meshlet GPU ms |
 | --- | ---: | ---: | ---: |
@@ -96,7 +96,7 @@ Test scene:
 | HiZ | 70.25 | 72.02 | 13.53 |
 
 
-### all_on
+### all_on (all meshoptimizer option)
 
 | Culling setup | Indexed GPU ms | Pulling GPU ms | Meshlet GPU ms |
 | --- | ---: | ---: | ---: |
