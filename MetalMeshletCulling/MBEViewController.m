@@ -25,6 +25,83 @@ static const MBEMeshletCompositionPreset kMeshletCompositionPresets[] = {
 static const NSUInteger kMeshletCompositionPresetCount = sizeof(kMeshletCompositionPresets) / sizeof(kMeshletCompositionPresets[0]);
 static const NSUInteger kDefaultMeshletCompositionPresetIndex = 4;
 
+@interface MBEBenchmarkCase : NSObject
+@property (nonatomic, assign) MBERenderPath renderPath;
+@property (nonatomic, assign) MBEMeshletCullingMode meshletCullingMode;
+@property (nonatomic, assign) MBEVSPSCullingMode vspsCullingMode;
+@property (nonatomic, assign) MBEMeshOptimizationOptions optimizationOptions;
+@property (nonatomic, copy) NSString *optimizationName;
+@property (nonatomic, copy) NSString *name;
++ (instancetype)caseWithName:(NSString *)name
+                  renderPath:(MBERenderPath)renderPath
+          meshletCullingMode:(MBEMeshletCullingMode)meshletCullingMode
+             vspsCullingMode:(MBEVSPSCullingMode)vspsCullingMode
+             optimizationName:(NSString *)optimizationName
+          optimizationOptions:(MBEMeshOptimizationOptions)optimizationOptions;
+@end
+
+@implementation MBEBenchmarkCase
+
++ (instancetype)caseWithName:(NSString *)name
+                  renderPath:(MBERenderPath)renderPath
+          meshletCullingMode:(MBEMeshletCullingMode)meshletCullingMode
+             vspsCullingMode:(MBEVSPSCullingMode)vspsCullingMode
+            optimizationName:(NSString *)optimizationName
+         optimizationOptions:(MBEMeshOptimizationOptions)optimizationOptions {
+    MBEBenchmarkCase *benchmarkCase = [MBEBenchmarkCase new];
+    benchmarkCase.name = name;
+    benchmarkCase.renderPath = renderPath;
+    benchmarkCase.meshletCullingMode = meshletCullingMode;
+    benchmarkCase.vspsCullingMode = vspsCullingMode;
+    benchmarkCase.optimizationName = optimizationName;
+    benchmarkCase.optimizationOptions = optimizationOptions;
+    return benchmarkCase;
+}
+
+@end
+
+static BOOL MBEEnvironmentFlagEnabled(NSString *value) {
+    if (value.length == 0) {
+        return NO;
+    }
+    NSString *lowercaseValue = value.lowercaseString;
+    return [lowercaseValue isEqualToString:@"1"] ||
+        [lowercaseValue isEqualToString:@"yes"] ||
+        [lowercaseValue isEqualToString:@"true"] ||
+        [lowercaseValue isEqualToString:@"on"];
+}
+
+static NSUInteger MBEEnvironmentUnsignedValue(NSString *value, NSUInteger fallbackValue) {
+    if (value.length == 0) {
+        return fallbackValue;
+    }
+    long long parsedValue = value.longLongValue;
+    return parsedValue > 0 ? (NSUInteger)parsedValue : fallbackValue;
+}
+
+static NSString *MBEOptimizationOptionsCSVName(MBEMeshOptimizationOptions options) {
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
+    if (options & MBEMeshOptimizationOptionRemap) {
+        [names addObject:@"remap"];
+    }
+    if (options & MBEMeshOptimizationOptionVertexCache) {
+        [names addObject:@"vertex_cache"];
+    }
+    if (options & MBEMeshOptimizationOptionOverdraw) {
+        [names addObject:@"overdraw"];
+    }
+    if (options & MBEMeshOptimizationOptionVertexFetch) {
+        [names addObject:@"vertex_fetch"];
+    }
+    if (options & MBEMeshOptimizationOptionMeshlets) {
+        [names addObject:@"meshlets"];
+    }
+    if (options & MBEMeshOptimizationOptionOptimizeMeshlet) {
+        [names addObject:@"optimize_meshlet"];
+    }
+    return names.count > 0 ? [names componentsJoinedByString:@"|"] : @"raw";
+}
+
 @interface MBEViewController () <MTKViewDelegate>
 @property (nonatomic, strong) id<MTLDevice> device;
 @property (nonatomic, strong) id<MTLCommandQueue> commandQueue;
@@ -57,10 +134,30 @@ static const NSUInteger kDefaultMeshletCompositionPresetIndex = 4;
 @property (nonatomic, assign) double currentFPS;
 @property (nonatomic, assign) double latestCPUFrameMS;
 @property (nonatomic, assign) double latestGPUFrameMS;
+@property (nonatomic, assign) BOOL benchmarkMode;
+@property (nonatomic, copy) NSArray<MBEBenchmarkCase *> *benchmarkCases;
+@property (nonatomic, strong) NSMutableArray<NSString *> *benchmarkRows;
+@property (nonatomic, copy) NSString *benchmarkOutputPath;
+@property (nonatomic, assign) NSUInteger benchmarkWarmupFrames;
+@property (nonatomic, assign) NSUInteger benchmarkSampleFrames;
+@property (nonatomic, assign) NSUInteger benchmarkCaseIndex;
+@property (nonatomic, assign) NSUInteger benchmarkSubmittedFrames;
+@property (nonatomic, assign) NSUInteger benchmarkCompletedSamples;
 
 - (NSButton *)newOptimizationCheckboxWithTitle:(NSString *)title;
 - (MBEMeshOptimizationOptions)effectiveOptimizationOptionsForRenderPath:(MBERenderPath)renderPath;
 - (MBEMesh *)newMeshWithOptimizationOptions:(MBEMeshOptimizationOptions)optimizationOptions;
+- (void)configureBenchmarkIfRequested;
+- (NSArray<MBEBenchmarkCase *> *)makeBenchmarkCases;
+- (void)beginBenchmarkCaseAtIndex:(NSUInteger)caseIndex;
+- (void)appendBenchmarkSampleForCase:(MBEBenchmarkCase *)benchmarkCase
+                           caseIndex:(NSUInteger)caseIndex
+                         sampleIndex:(NSUInteger)sampleIndex
+                            cpuFrame:(double)cpuFrameMS
+                            gpuFrame:(double)gpuFrameMS
+                     visibleInstances:(NSString *)visibleInstances
+                           resolution:(CGSize)resolution;
+- (void)finishBenchmark;
 @end
 
 @implementation MBEViewController
@@ -96,6 +193,7 @@ static const NSUInteger kDefaultMeshletCompositionPresetIndex = 4;
     self.renderer.mesh = [self newMeshWithOptimizationOptions:self.currentEffectiveOptimizationOptions];
     [self updateMeshletCullingControlVisibility];
     [self updateOptimizationControlStateForRenderPath:self.renderer.renderPath];
+    [self configureBenchmarkIfRequested];
 }
 
 - (void)makeStatsOverlay {
@@ -491,6 +589,233 @@ static const NSUInteger kDefaultMeshletCompositionPresetIndex = 4;
     self.latestGPUFrameMS = 0.0;
 }
 
+- (void)configureBenchmarkIfRequested {
+    NSDictionary<NSString *, NSString *> *environment = NSProcessInfo.processInfo.environment;
+    if (!MBEEnvironmentFlagEnabled(environment[@"MBE_BENCHMARK"])) {
+        return;
+    }
+
+    self.benchmarkMode = YES;
+    self.benchmarkWarmupFrames = MBEEnvironmentUnsignedValue(environment[@"MBE_BENCHMARK_WARMUP"], 60);
+    self.benchmarkSampleFrames = MBEEnvironmentUnsignedValue(environment[@"MBE_BENCHMARK_FRAMES"], 120);
+    NSUInteger benchmarkFPS = MBEEnvironmentUnsignedValue(environment[@"MBE_BENCHMARK_FPS"], 240);
+    NSString *outputPath = environment[@"MBE_BENCHMARK_OUTPUT"];
+    if (outputPath.length == 0) {
+        outputPath = [NSFileManager.defaultManager.currentDirectoryPath stringByAppendingPathComponent:@"benchmark_results.csv"];
+    }
+    self.benchmarkOutputPath = outputPath;
+    self.benchmarkRows = [NSMutableArray arrayWithObject:@"case_index,case,scene,render_path,cull_mode,opt_preset,opt_flags,meshlet_vertices,meshlet_triangles,resolution,frame,cpu_ms,gpu_ms,vertices,indices,triangles,meshlets,visible_instances,total_instances"];
+    self.benchmarkCases = [self makeBenchmarkCases];
+
+    self.mtkView.enableSetNeedsDisplay = NO;
+    self.mtkView.paused = NO;
+    self.mtkView.preferredFramesPerSecond = (NSInteger)benchmarkFPS;
+
+    NSLog(@"Benchmark enabled: %lu cases, warmup=%lu frames, samples=%lu frames, fps=%lu, output=%@",
+          (unsigned long)self.benchmarkCases.count,
+          (unsigned long)self.benchmarkWarmupFrames,
+          (unsigned long)self.benchmarkSampleFrames,
+          (unsigned long)benchmarkFPS,
+          self.benchmarkOutputPath);
+    [self beginBenchmarkCaseAtIndex:0];
+}
+
+- (NSArray<MBEBenchmarkCase *> *)makeBenchmarkCases {
+    const MBEMeshOptimizationOptions vspsOptions[] = {
+        0,
+        MBEMeshOptimizationOptionRemap,
+        MBEMeshOptimizationOptionRemap |
+            MBEMeshOptimizationOptionVertexCache |
+            MBEMeshOptimizationOptionOverdraw |
+            MBEMeshOptimizationOptionVertexFetch,
+    };
+    const MBEMeshOptimizationOptions meshletOptions[] = {
+        MBEMeshOptimizationOptionMeshlets,
+        MBEMeshOptimizationOptionRemap | MBEMeshOptimizationOptionMeshlets,
+        MBEMeshOptimizationOptionRemap |
+            MBEMeshOptimizationOptionVertexCache |
+            MBEMeshOptimizationOptionOverdraw |
+            MBEMeshOptimizationOptionVertexFetch |
+            MBEMeshOptimizationOptionMeshlets |
+            MBEMeshOptimizationOptionOptimizeMeshlet,
+    };
+    NSArray<NSString *> *optimizationNames = @[ @"raw", @"remap", @"all_on" ];
+
+    NSMutableArray<MBEBenchmarkCase *> *cases = [NSMutableArray array];
+    NSArray<NSNumber *> *vspsRenderPaths = @[ @(MBERenderPathIndexedVSPS), @(MBERenderPathVertexPullingVSPS) ];
+    NSArray<NSNumber *> *vspsCullingModes = @[
+        @(MBEVSPSCullingModeNone),
+        @(MBEVSPSCullingModeCPUFrustum),
+        @(MBEVSPSCullingModeGPUFrustum),
+        @(MBEVSPSCullingModeGPUHiZ),
+    ];
+    NSArray<NSNumber *> *meshletCullingModes = @[
+        @(MBEMeshletCullingModeNone),
+        @(MBEMeshletCullingModeFrustum),
+        @(MBEMeshletCullingModeFull),
+        @(MBEMeshletCullingModeFullHiZ),
+    ];
+
+    for (NSNumber *renderPathNumber in vspsRenderPaths) {
+        MBERenderPath renderPath = (MBERenderPath)renderPathNumber.integerValue;
+        for (NSUInteger optimizationIndex = 0; optimizationIndex < optimizationNames.count; ++optimizationIndex) {
+            for (NSNumber *cullingModeNumber in vspsCullingModes) {
+                MBEVSPSCullingMode cullingMode = (MBEVSPSCullingMode)cullingModeNumber.integerValue;
+                NSString *name = [NSString stringWithFormat:@"%@/%@/%@",
+                                  MBERenderPathDisplayName(renderPath),
+                                  MBEVSPSCullingModeDisplayName(cullingMode),
+                                  optimizationNames[optimizationIndex]];
+                [cases addObject:[MBEBenchmarkCase caseWithName:name
+                                                     renderPath:renderPath
+                                             meshletCullingMode:MBEMeshletCullingModeFull
+                                                vspsCullingMode:cullingMode
+                                               optimizationName:optimizationNames[optimizationIndex]
+                                            optimizationOptions:vspsOptions[optimizationIndex]]];
+            }
+        }
+    }
+
+    for (NSUInteger optimizationIndex = 0; optimizationIndex < optimizationNames.count; ++optimizationIndex) {
+        for (NSNumber *cullingModeNumber in meshletCullingModes) {
+            MBEMeshletCullingMode cullingMode = (MBEMeshletCullingMode)cullingModeNumber.integerValue;
+            NSString *name = [NSString stringWithFormat:@"%@/%@/%@",
+                              MBERenderPathDisplayName(MBERenderPathMeshlet),
+                              MBEMeshletCullingModeDisplayName(cullingMode),
+                              optimizationNames[optimizationIndex]];
+            [cases addObject:[MBEBenchmarkCase caseWithName:name
+                                                 renderPath:MBERenderPathMeshlet
+                                         meshletCullingMode:cullingMode
+                                            vspsCullingMode:MBEVSPSCullingModeCPUFrustum
+                                           optimizationName:optimizationNames[optimizationIndex]
+                                        optimizationOptions:meshletOptions[optimizationIndex]]];
+        }
+    }
+
+    return cases;
+}
+
+- (void)beginBenchmarkCaseAtIndex:(NSUInteger)caseIndex {
+    if (caseIndex >= self.benchmarkCases.count) {
+        [self finishBenchmark];
+        return;
+    }
+
+    self.mtkView.paused = YES;
+    id<MTLCommandBuffer> commandBuffer = self.lastSubmittedCommandBuffer;
+    if (commandBuffer != nil && commandBuffer.status < MTLCommandBufferStatusCompleted) {
+        [commandBuffer waitUntilCompleted];
+    }
+
+    MBEBenchmarkCase *benchmarkCase = self.benchmarkCases[caseIndex];
+    self.benchmarkCaseIndex = caseIndex;
+    self.benchmarkSubmittedFrames = 0;
+    self.benchmarkCompletedSamples = 0;
+    self.selectedOptimizationOptions = benchmarkCase.optimizationOptions;
+    self.renderer.renderPath = benchmarkCase.renderPath;
+    self.renderer.meshletCullingMode = benchmarkCase.meshletCullingMode;
+    self.renderer.vspsCullingMode = benchmarkCase.vspsCullingMode;
+    [self.renderer invalidateHiZ];
+
+    MBEMeshOptimizationOptions effectiveOptions = [self effectiveOptimizationOptionsForRenderPath:benchmarkCase.renderPath];
+    if (effectiveOptions != self.currentEffectiveOptimizationOptions) {
+        MBEMesh *mesh = [self newMeshWithOptimizationOptions:effectiveOptions];
+        if (mesh != nil) {
+            self.renderer.mesh = mesh;
+            self.currentEffectiveOptimizationOptions = effectiveOptions;
+        } else {
+            NSLog(@"Benchmark mesh rebuild failed for case %@", benchmarkCase.name);
+            [self finishBenchmark];
+            return;
+        }
+    }
+
+    self.renderPathControl.selectedSegment = benchmarkCase.renderPath;
+    [self updateMeshletCullingControlVisibility];
+    [self updateOptimizationControlStateForRenderPath:benchmarkCase.renderPath];
+    [self resetStatsWindow];
+
+    NSLog(@"Benchmark case %lu/%lu: %@, flags=%@",
+          (unsigned long)(caseIndex + 1),
+          (unsigned long)self.benchmarkCases.count,
+          benchmarkCase.name,
+          MBEOptimizationOptionsCSVName(effectiveOptions));
+    self.mtkView.paused = NO;
+}
+
+- (void)appendBenchmarkSampleForCase:(MBEBenchmarkCase *)benchmarkCase
+                           caseIndex:(NSUInteger)caseIndex
+                         sampleIndex:(NSUInteger)sampleIndex
+                            cpuFrame:(double)cpuFrameMS
+                            gpuFrame:(double)gpuFrameMS
+                     visibleInstances:(NSString *)visibleInstances
+                           resolution:(CGSize)resolution {
+    MBEMesh *mesh = self.renderer.mesh;
+    if (mesh == nil) {
+        return;
+    }
+
+    NSString *cullingName = benchmarkCase.renderPath == MBERenderPathMeshlet
+        ? MBEMeshletCullingModeDisplayName(benchmarkCase.meshletCullingMode)
+        : MBEVSPSCullingModeDisplayName(benchmarkCase.vspsCullingMode);
+    NSString *resolutionString = [NSString stringWithFormat:@"%.0fx%.0f", resolution.width, resolution.height];
+    NSString *row = [NSString stringWithFormat:@"%lu,%@,kitten,%@,%@,%@,%@,%lu,%lu,%@,%lu,%.4f,%.4f,%lu,%lu,%lu,%lu,%@,%lu",
+                     (unsigned long)caseIndex,
+                     benchmarkCase.name,
+                     MBERenderPathDisplayName(benchmarkCase.renderPath),
+                     cullingName,
+                     benchmarkCase.optimizationName,
+                     MBEOptimizationOptionsCSVName(mesh.optimizationOptions),
+                     (unsigned long)mesh.meshletMaxVertexCount,
+                     (unsigned long)mesh.meshletMaxTriangleCount,
+                     resolutionString,
+                     (unsigned long)sampleIndex,
+                     cpuFrameMS,
+                     gpuFrameMS,
+                     (unsigned long)mesh.vertexCount,
+                     (unsigned long)mesh.indexCount,
+                     (unsigned long)mesh.triangleCount,
+                     (unsigned long)mesh.meshletCount,
+                     visibleInstances,
+                     (unsigned long)self.renderer.totalInstanceCount];
+    [self.benchmarkRows addObject:row];
+}
+
+- (void)finishBenchmark {
+    if (!self.benchmarkMode) {
+        return;
+    }
+
+    self.benchmarkMode = NO;
+    self.mtkView.paused = YES;
+
+    NSString *csv = [self.benchmarkRows componentsJoinedByString:@"\n"];
+    csv = [csv stringByAppendingString:@"\n"];
+    NSError *error = nil;
+    NSString *outputDirectory = self.benchmarkOutputPath.stringByDeletingLastPathComponent;
+    [NSFileManager.defaultManager createDirectoryAtPath:outputDirectory
+                            withIntermediateDirectories:YES
+                                             attributes:nil
+                                                  error:&error];
+    if (error != nil) {
+        NSLog(@"Failed to create benchmark output directory %@: %@", outputDirectory, error);
+        error = nil;
+    }
+
+    BOOL wroteFile = [csv writeToFile:self.benchmarkOutputPath
+                           atomically:YES
+                             encoding:NSUTF8StringEncoding
+                                error:&error];
+    if (wroteFile) {
+        NSLog(@"Benchmark finished: wrote %@ (%lu samples)",
+              self.benchmarkOutputPath,
+              (unsigned long)(self.benchmarkRows.count > 0 ? self.benchmarkRows.count - 1 : 0));
+    } else {
+        NSLog(@"Failed to write benchmark CSV %@: %@", self.benchmarkOutputPath, error);
+    }
+
+    [NSApp terminate:nil];
+}
+
 - (void)mtkView:(nonnull MTKView *)view drawableSizeWillChange:(CGSize)size {
     self.renderer.viewport = (MTLViewport){ 0.0, 0.0, size.width, size.height, 0.0, 1.0 };
     [self.renderer invalidateHiZ];
@@ -499,6 +824,23 @@ static const NSUInteger kDefaultMeshletCompositionPresetIndex = 4;
 - (void)drawInMTKView:(nonnull MTKView *)view {
     if (self.isRebuildingMesh) {
         return;
+    }
+
+    BOOL benchmarkMode = self.benchmarkMode;
+    NSUInteger benchmarkFrameIndex = 0;
+    NSUInteger benchmarkCaseIndex = 0;
+    MBEBenchmarkCase *benchmarkCase = nil;
+    if (benchmarkMode) {
+        if (self.benchmarkCaseIndex >= self.benchmarkCases.count) {
+            return;
+        }
+        NSUInteger benchmarkFrameLimit = self.benchmarkWarmupFrames + self.benchmarkSampleFrames;
+        if (self.benchmarkSubmittedFrames >= benchmarkFrameLimit) {
+            return;
+        }
+        benchmarkFrameIndex = self.benchmarkSubmittedFrames + 1;
+        benchmarkCaseIndex = self.benchmarkCaseIndex;
+        benchmarkCase = self.benchmarkCases[benchmarkCaseIndex];
     }
 
     CFTimeInterval frameStartTime = CACurrentMediaTime();
@@ -523,6 +865,19 @@ static const NSUInteger kDefaultMeshletCompositionPresetIndex = 4;
 
     [commandBuffer presentDrawable:view.currentDrawable];
 
+    double cpuFrameMS = (CACurrentMediaTime() - frameStartTime) * 1000.0;
+    NSString *benchmarkVisibleInstances = nil;
+    CGSize benchmarkResolution = view.drawableSize;
+    if (benchmarkMode) {
+        BOOL gpuVisibleCountUnknown = self.renderer.renderPath != MBERenderPathMeshlet &&
+            (self.renderer.vspsCullingMode == MBEVSPSCullingModeGPUFrustum ||
+             self.renderer.vspsCullingMode == MBEVSPSCullingModeGPUHiZ);
+        benchmarkVisibleInstances = gpuVisibleCountUnknown
+            ? @"-1"
+            : [NSString stringWithFormat:@"%lu", (unsigned long)self.renderer.cpuVisibleInstanceCount];
+        self.benchmarkSubmittedFrames = benchmarkFrameIndex;
+    }
+
     __weak typeof(self) weakSelf = self;
     [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completedCommandBuffer) {
         double gpuFrameMS = 0.0;
@@ -531,14 +886,41 @@ static const NSUInteger kDefaultMeshletCompositionPresetIndex = 4;
         }
 
         dispatch_async(dispatch_get_main_queue(), ^{
-            [weakSelf updateStatsWithGPUFrameMS:gpuFrameMS countFrame:NO];
+            MBEViewController *strongSelf = weakSelf;
+            if (strongSelf == nil) {
+                return;
+            }
+
+            [strongSelf updateStatsWithGPUFrameMS:gpuFrameMS countFrame:NO];
+
+            if (!benchmarkMode || !strongSelf.benchmarkMode || strongSelf.benchmarkCaseIndex != benchmarkCaseIndex) {
+                return;
+            }
+
+            if (benchmarkFrameIndex > strongSelf.benchmarkWarmupFrames) {
+                NSUInteger sampleIndex = benchmarkFrameIndex - strongSelf.benchmarkWarmupFrames;
+                if (sampleIndex <= strongSelf.benchmarkSampleFrames) {
+                    [strongSelf appendBenchmarkSampleForCase:benchmarkCase
+                                                   caseIndex:benchmarkCaseIndex
+                                                 sampleIndex:sampleIndex
+                                                    cpuFrame:cpuFrameMS
+                                                    gpuFrame:gpuFrameMS
+                                             visibleInstances:benchmarkVisibleInstances
+                                                   resolution:benchmarkResolution];
+                    strongSelf.benchmarkCompletedSamples += 1;
+                }
+
+                if (strongSelf.benchmarkCompletedSamples >= strongSelf.benchmarkSampleFrames) {
+                    [strongSelf beginBenchmarkCaseAtIndex:benchmarkCaseIndex + 1];
+                }
+            }
         });
     }];
 
     [commandBuffer commit];
     self.lastSubmittedCommandBuffer = commandBuffer;
 
-    self.latestCPUFrameMS = (CACurrentMediaTime() - frameStartTime) * 1000.0;
+    self.latestCPUFrameMS = cpuFrameMS;
     [self updateStatsWithGPUFrameMS:self.latestGPUFrameMS countFrame:YES];
 }
 
